@@ -141,7 +141,7 @@ class TestBackModel():
             try:
                 self.setBuySignals_csv(filepath, get_indicator_func,get_signal_func,drop_na)
                 output=self.run(initial_cash=initial_cash,save_log=save_log)
-                output.to_csv(output_folder+"/"+folder+"/total_output_"+self._signal_func_name+".csv",mode="a",header=False)
+                output.to_csv(output_folder+"/"+folder+"total_output_"+self._signal_func_name+".csv",mode="a",header=False)
                 if print_output:
                     print(output)
             except Exception as e:

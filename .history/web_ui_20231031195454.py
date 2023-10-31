@@ -48,7 +48,7 @@ def index():
 
 @app.route('/Conclude')
 def Conclude():
-    return render_template("Conclude.html", folder="Conclusion")
+    return render_template("Conclude.html", folder="Conclude")
 
 @app.route('/Visualization')
 def Visualization():

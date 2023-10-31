@@ -29,8 +29,22 @@
                 <input type="file" directory id="folder-selector" value="">
             </div>
         </div>
+        <!-- 使用一个按钮，实现点击执行RUN_FOLDER函数 -->
         <button type="button" id="conclude_button" class="btn btn-success btn-block">Conclude</button>
 
+        <!-- 显示闪现的消息 -->
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        {% for message in messages %}
+        <div class='alert alert-danger alert-dismissible fade show mt-3' role='alert'>
+            {{ message }}
+            <button type='button' class='close' data-dismiss='alert' aria-label='Close'>
+                <span aria-hidden='true'>×</span>
+            </button>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
     </div>
 
     <script>

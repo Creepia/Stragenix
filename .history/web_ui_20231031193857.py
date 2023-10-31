@@ -1,10 +1,8 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, request
 from flask_socketio import SocketIO
 import talib as tal
 import numpy as np
-np.random.seed(42)
 import AutoTestback as atb
-import Conclude as cc
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "scrtk"
@@ -32,9 +30,6 @@ DEFAULT_INDI_FUNC="""def getIndicators(df):
 DEFAULT_SIGN_DICT="""signDict={
     "Random":atb.RANDOM
 }"""
-signDict={
-    "Random":atb.RANDOM
-}
 
 def getIndicators(df):
     return atb.getIndicators(df)
@@ -48,7 +43,7 @@ def index():
 
 @app.route('/Conclude')
 def Conclude():
-    return render_template("Conclude.html", folder="Conclusion")
+    return render_template("Conclude.html", folder="Test", output_folder="Conclusion", initial_cash="1000000", get_indicator_func=DEFAULT_INDI_FUNC)
 
 @app.route('/Visualization')
 def Visualization():
@@ -71,7 +66,7 @@ def doAutoTestBack(data):
     # print("doing auto test back...")
     TestBack=atb.TestBackModel()
     SG=atb.SignalGeneartor()
-    SG.addDecisions(signDict)
+    SG.addDecisions(getSignDict())
     folder=data["folder"]
     for name,decifunc in SG.NextDecision():
         TestBack.run_folder(
@@ -83,12 +78,6 @@ def doAutoTestBack(data):
             initial_cash=int(data["initial_cash"]),
             output_folder=data["output_folder"]
             )
-    return {"success":True}
-
-@socketio.on("doConclude")
-def doConclude(data):
-    CD=cc.Concluder(data["folder"])
-    CD.readFolder()
     return {"success":True}
 
 if __name__ == '__main__':

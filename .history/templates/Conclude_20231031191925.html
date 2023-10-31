@@ -1,4 +1,6 @@
 <!DOCTYPE html>
+<html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <title>Web UI</title>
@@ -14,8 +16,8 @@
     <div class="container">
         <ul class="nav nav-tabs">
             <li><a href="/">TestBack</a></li>
-            <li><a href="Conclude">Conclude</a></li>
-            <li class="active"><a href="Visualization">Visualization</a></li>
+            <li class="active"><a href="Conclude">Conclude</a></li>
+            <li><a href="Visualization">Visualization</a></li>
         </ul>
 
         <div class="row">
@@ -116,7 +118,7 @@
             // 尝试将文本框中的字符串转换为函数对象
             console.log("in update signal func.");
             try {
-                socket.emit("updateSignalsDictionary", get_signal_func.value, function (res) {
+                socket.emit("updateSignalsFunctions", get_signal_func.value, function (res) {
                     if (res["success"]) alert("Successfully Updated.")
                 });
             } catch (e) {

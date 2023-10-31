@@ -48,7 +48,7 @@ def index():
 
 @app.route('/Conclude')
 def Conclude():
-    return render_template("Conclude.html", folder="Conclusion")
+    return render_template("Conclude.html", folder="Test", output_folder="Conclusion", initial_cash="1000000", get_indicator_func=DEFAULT_INDI_FUNC)
 
 @app.route('/Visualization')
 def Visualization():
@@ -83,12 +83,6 @@ def doAutoTestBack(data):
             initial_cash=int(data["initial_cash"]),
             output_folder=data["output_folder"]
             )
-    return {"success":True}
-
-@socketio.on("doConclude")
-def doConclude(data):
-    CD=cc.Concluder(data["folder"])
-    CD.readFolder()
     return {"success":True}
 
 if __name__ == '__main__':

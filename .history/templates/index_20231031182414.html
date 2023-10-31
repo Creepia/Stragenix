@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Web UI</title>
+    <!-- 引入bootstrap样式表 -->
+    <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet">
+    <!-- 引入jquery脚本 -->
+    <script src="https://cdn.staticfile.org/jquery/3.5.1/jquery.min.js"></script>
+    <!-- 引入bootstrap脚本 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.2.0/socket.io.js"></script>
+</head>
+
+<body>
+    <div class="container">
+        <ul class="nav nav-tabs">
+            <li class="active"><a href="index.html">TestBack</a></li>
+            <li><a href="Conclude.html">Conclude</a></li>
+            <li><a href="Visualization.html">Visualization</a></li>
+        </ul>
+
+        <div class="row">
+            <label for="folder" class="col-sm-2 col-form-label">folder</label>
+            <div class="col-sm-8">
+                <!-- 使用一个文件选择器，让用户选择一个文件夹的路径 -->
+                <input type="text" class="form-control" id="folder" name="folder" webkitdirectory directory required
+                    value={{folder}}>
+            </div>
+            <div class="col-sm-2">
+                <input type="file" directory id="folder-selector" value="">
+            </div>
+        </div>
+        <div class="row">
+            <label for="output_folder" class="col-sm-2 col-form-label">output_folder</label>
+            <div class="col-sm-10">
+                <!-- 使用一个文件选择器，让用户选择一个文件夹的路径 -->
+                <input type="text" class="form-control" id="output_folder" name="output_folder" webkitdirectory
+                    directory required value="{{output_folder}}">
+            </div>
+        </div>
+        <div class="row">
+            <label for="initial_cash" class="col-sm-2 col-form-label">initial_cash</label>
+            <div class="col-sm-10">
+                <!-- 使用一个输入框，让用户输入一个数字 -->
+                <input type="number" class="form-control" id="initial_cash" name="initial_cash" required value={{
+                    initial_cash }}>
+            </div>
+        </div>
+        <div class="row">
+            <label for="get_indicator_func" class="col-sm-2 col-form-label">get_indicator_func</label>
+            <div class="col-sm-9">
+                <!-- 使用一个可修改的文本框，显示当前的函数，并且旁边有一个更新按钮 -->
+                <textarea class="form-control" id="get_indicator_func" name="get_indicator_func"
+                    rows="10">{{ get_indicator_func }}</textarea>
+            </div>
+            <div class="col-sm-1">
+                <button type="button" class="btn btn-primary mt-2" id="update_get_indicator_button">Update</button>
+            </div>
+        </div>
+        <div class="row">
+            <label for="get_signal_func" class="col-sm-2 col-form-label">get_signal_func</label>
+            <div class="col-sm-9">
+                <!-- 使用一个可修改的文本框，显示当前的函数，并且旁边有一个更新按钮 -->
+                <textarea class="form-control" id="get_signal_func" name="get_signal_func"
+                    rows="10">{{ get_signal_func }}</textarea>
+            </div>
+            <div class="col-sm-1">
+                <button type="button" class="btn btn-primary mt-2" id="update_get_signal_button">Update</button>
+            </div>
+        </div>
+        <!-- 使用一个按钮，实现点击执行RUN_FOLDER函数 -->
+        <button type="button" id="auto_test_back_button" class="btn btn-success btn-block">执行</button>
+
+        <!-- 显示闪现的消息 -->
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        {% for message in messages %}
+        <div class='alert alert-danger alert-dismissible fade show mt-3' role='alert'>
+            {{ message }}
+            <button type='button' class='close' data-dismiss='alert' aria-label='Close'>
+                <span aria-hidden='true'>×</span>
+            </button>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+    </div>
+
+    <!-- 定义一些脚本，用于更新函数的内容 -->
+    <script>
+        // 获取更新按钮和文本框元素
+        var update_get_indicator_button = document.getElementById("update_get_indicator_button");
+        var update_get_signal_button = document.getElementById("update_get_signal_button");
+        var get_indicator_func = document.getElementById("get_indicator_func");
+        var get_signal_func = document.getElementById("get_signal_func");
+        var auto_test_back_button = document.getElementById("auto_test_back_button");
+        var folder = document.getElementById("folder");
+        var output_folder = document.getElementById("output_folder");
+        var initial_cash = document.getElementById("initial_cash");
+        var socket = io.connect('http://' + document.domain + ':' + location.port);
+        // 为更新按钮添加点击事件
+        update_get_indicator_button.onclick = function () {
+            // 尝试将文本框中的字符串转换为函数对象
+            console.log("in update indi func.");
+            try {
+                socket.emit("updateIndicatorsFunctions", get_indicator_func.value, function (res) {
+                    if (res["success"]) alert("Successfully Updated.")
+                });
+            } catch (e) {
+                // 如果失败，显示错误的消息
+                alert("Failed at Updating：" + e.message);
+            }
+        }
+
+        // 为更新按钮添加点击事件
+        update_get_signal_button.onclick = function () {
+            // 尝试将文本框中的字符串转换为函数对象
+            console.log("in update signal func.");
+            try {
+                socket.emit("updateSignalsFunctions", get_signal_func.value, function (res) {
+                    if (res["success"]) alert("Successfully Updated.")
+                });
+            } catch (e) {
+                // 如果失败，显示错误的消息
+                alert("Failed at Updating：" + e.message);
+            }
+        }
+
+        auto_test_back_button.onclick = function () {
+            console.log("in auto_test_button func.");
+            try {
+                console.log({ "get_sign_func": get_signal_func.value, "get_indi_func": get_indicator_func.value, "folder": folder.value, "output_folder": output_folder.value, "initial_cash": initial_cash.value });
+                socket.emit("doAutoTestBack", { "get_sign_func": get_signal_func.value, "get_indi_func": get_indicator_func.value, "folder": folder.value, "output_folder": output_folder.value, "initial_cash": initial_cash.value }, function (res) {
+                    if (res["success"]) alert("Successfully Updated.")
+                });
+            } catch (e) {
+                // 如果失败，显示错误的消息
+                alert("Failed at Updating：" + e.message);
+            }
+        }
+    </script>
+</body>
+
+</html>

@@ -27,17 +27,6 @@ DEFAULT_INDI_FUNC="""def getIndicators(df):
     return df
 """
 
-def getIndicators(df):
-    return atb.getIndicators(df)
-
-@app.route('/')
-def index():
-    return render_template("index.html", folder="Test", output_folder="Conclusion", initial_cash="1000000", get_indicator_func=DEFAULT_INDI_FUNC)
-
-@app.route('/')
-def index():
-    return render_template("index.html", folder="Test", output_folder="Conclusion", initial_cash="1000000", get_indicator_func=DEFAULT_INDI_FUNC)
-
 @app.route('/')
 def index():
     return render_template("index.html", folder="Test", output_folder="Conclusion", initial_cash="1000000", get_indicator_func=DEFAULT_INDI_FUNC)
@@ -67,7 +56,7 @@ def doAutoTestBack(data):
             folder=folder,
             save_log=f"{folder}/{name}",
             signal_func_name=name,
-            get_indicator_func=getIndicators,
+            get_indicator_func=data["get_indi_func"],
             get_signal_func=decifunc,
             initial_cash=int(data["initial_cash"]),
             output_folder=data["output_folder"]

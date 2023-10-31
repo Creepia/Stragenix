@@ -27,20 +27,9 @@ DEFAULT_INDI_FUNC="""def getIndicators(df):
     return df
 """
 
-def getIndicators(df):
-    return atb.getIndicators(df)
-
 @app.route('/')
 def index():
-    return render_template("index.html", folder="Test", output_folder="Conclusion", initial_cash="1000000", get_indicator_func=DEFAULT_INDI_FUNC)
-
-@app.route('/')
-def index():
-    return render_template("index.html", folder="Test", output_folder="Conclusion", initial_cash="1000000", get_indicator_func=DEFAULT_INDI_FUNC)
-
-@app.route('/')
-def index():
-    return render_template("index.html", folder="Test", output_folder="Conclusion", initial_cash="1000000", get_indicator_func=DEFAULT_INDI_FUNC)
+    return render_template("index.html", folder="data", output_folder="Conclusion", initial_cash="1000000", get_indicator_func=DEFAULT_INDI_FUNC)
 
 @socketio.on("updateIndicatorsFunctions")
 def updateIndicatorsFunctions(data):
@@ -55,23 +44,8 @@ def updateSignalsFunctions(data):
 
 @socketio.on("doAutoTestBack")
 def doAutoTestBack(data):
-    # print("doing auto test back...")
-    TestBack=atb.TestBackModel()
-    SG=atb.SignalGeneartor()
-    SG.addDecisions({
-        "Random":atb.RANDOM
-        })
-    folder=data["folder"]
-    for name,decifunc in SG.NextDecision():
-        TestBack.run_folder(
-            folder=folder,
-            save_log=f"{folder}/{name}",
-            signal_func_name=name,
-            get_indicator_func=getIndicators,
-            get_signal_func=decifunc,
-            initial_cash=int(data["initial_cash"]),
-            output_folder=data["output_folder"]
-            )
+    print("here")
+    print(data)
     return {"success":True}
 
 if __name__ == '__main__':

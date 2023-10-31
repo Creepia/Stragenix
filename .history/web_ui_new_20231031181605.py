@@ -34,14 +34,6 @@ def getIndicators(df):
 def index():
     return render_template("index.html", folder="Test", output_folder="Conclusion", initial_cash="1000000", get_indicator_func=DEFAULT_INDI_FUNC)
 
-@app.route('/')
-def index():
-    return render_template("index.html", folder="Test", output_folder="Conclusion", initial_cash="1000000", get_indicator_func=DEFAULT_INDI_FUNC)
-
-@app.route('/')
-def index():
-    return render_template("index.html", folder="Test", output_folder="Conclusion", initial_cash="1000000", get_indicator_func=DEFAULT_INDI_FUNC)
-
 @socketio.on("updateIndicatorsFunctions")
 def updateIndicatorsFunctions(data):
     print(data)

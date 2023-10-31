@@ -129,8 +129,6 @@ class TestBackModel():
     def run_folder(self, folder: str, get_indicator_func,get_signal_func,signal_func_name="",initial_cash=1000000, drop_na=True,save_log="",print_output=True,output_folder="Conclusion"):
         self.setSignalFunctionName(signal_func_name)
         output=pd.DataFrame({'backtest_length': None, 'diff_list_length': None, 'total_returns': None, 'win_rate': None}, index=[""])
-        if not os.path.exists(output_folder+"/"+folder):
-            os.mkdir(output_folder+"/"+folder)
         output.to_csv(output_folder+"/"+folder+"/total_output_"+self._signal_func_name+".csv",mode="w")
         for file_path in os.listdir(folder):
             if ("output" in file_path) or file_path[-11:]=="_result.csv" or file_path[-4:]!=".csv":
@@ -225,6 +223,24 @@ def get_RVI(df, n=10):
     df['RVI_Numerator'] = (df['Close'] - df['Open']) / (df['High'] - df['Low'])
     # Calculate N period SMA for RVI
     df['RVI_SMA'] = df['RVI_Numerator'].rolling(window=n).mean()
+    return df
+
+def getIndicators(df):
+    df["RSI"] = tal.RSI(df["Close"])
+    df["SMA"] = tal.SMA(df["Close"])
+    df["SAR"] = tal.SAR(df["High"], df["Low"], 0.02, 0.2)
+    df["WPR"] = get_WPR(df["High"], df["Low"], df["Close"], 14)
+    df["CCI"] = tal.CCI(df["High"], df["Low"], df["Close"], 20)
+    df["ADX"] = tal.ADX(df["High"], df["Low"], df["Close"])
+    _, _, df["MACD"] = tal.MACD(df["Close"], fastperiod=10, slowperiod=20, signalperiod=9)
+    df=get_KD(df,window=14,k=3,d=2)
+    df["-DI"]=tal.MINUS_DI(df["High"], df["Low"], df["Close"], timeperiod=14)
+    df["+DI"]=tal.MINUS_DI(df["High"], df["Low"], df["Close"], timeperiod=14)
+    df["ADXR"]=tal.ADXR(df["High"], df["Low"], df["Close"], timeperiod=14)
+    df["MFI"]=tal.MFI(df["High"], df["Low"], df["Close"],df["Volume"] ,timeperiod=14)
+    df["EMA"]=tal.EMA(np.array(df["Close"]), timeperiod = 6)
+    df=get_RVI(df,n=10)
+    df["OBV"] = tal.OBV(df["Close"], df['Volume'])
     return df
 
 def getIndicators(df):

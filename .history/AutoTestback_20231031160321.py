@@ -129,8 +129,6 @@ class TestBackModel():
     def run_folder(self, folder: str, get_indicator_func,get_signal_func,signal_func_name="",initial_cash=1000000, drop_na=True,save_log="",print_output=True,output_folder="Conclusion"):
         self.setSignalFunctionName(signal_func_name)
         output=pd.DataFrame({'backtest_length': None, 'diff_list_length': None, 'total_returns': None, 'win_rate': None}, index=[""])
-        if not os.path.exists(output_folder+"/"+folder):
-            os.mkdir(output_folder+"/"+folder)
         output.to_csv(output_folder+"/"+folder+"/total_output_"+self._signal_func_name+".csv",mode="w")
         for file_path in os.listdir(folder):
             if ("output" in file_path) or file_path[-11:]=="_result.csv" or file_path[-4:]!=".csv":

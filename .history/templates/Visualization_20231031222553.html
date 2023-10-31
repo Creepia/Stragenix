@@ -13,11 +13,10 @@
 
 <body>
     <div class="container">
-        <h4>Web UI for Strategenix</h4>
         <ul class="nav nav-tabs">
             <li><a href="/">TestBack</a></li>
-            <li class="active"><a href="Conclude">Conclude</a></li>
-            <li><a href="Visualization">Visualization</a></li>
+            <li><a href="Conclude">Conclude</a></li>
+            <li class="active"><a href="Visualization">Visualization</a></li>
         </ul>
 
         <div class="row">
@@ -28,23 +27,23 @@
             </div>
         </div>
 
-        <button type="button" id="conclude_button" class="btn btn-success btn-block">Conclude</button>
-    </div>
+        <div class="row">
+            <label for=" x-axis" class="col-sm-2 col-form-label">Horizontal-axis</label>
+            <div class="col-sm-10">
+                <input type="text" class="form-control" id=" x-axis" name=" x-axis" webkitdirectory directory required
+                    value={{ X}}>
+            </div>
+        </div>
 
-    <script>
-        var socket = io.connect('http://' + document.domain + ':' + location.port);
-        var folder = document.getElementById("folder");
-        conclude_button.onclick = function () {
-            console.log("in conclude_button func.");
-            try {
-                socket.emit("doConclude", { "folder": folder.value }, function (res) {
-                    if (res["success"]) alert("Successfully Updated.")
-                });
-            } catch (e) {
-                alert("Failed at Updating：" + e.message);
-            }
-        }
-    </script>
+        <div class="row">
+            <label for="y-axis" class="col-sm-2 col-form-label">Vertical-axis</label>
+            <div class="col-sm-10">
+                <input type="text" class="form-control" id="y-axis" name="y-axis" webkitdirectory directory required
+                    value={{Y}}>
+            </div>
+        </div>
+
+    </div>
 </body>
 
 </html>

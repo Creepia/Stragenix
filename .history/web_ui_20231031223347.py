@@ -31,22 +31,10 @@ DEFAULT_INDI_FUNC="""def getIndicators(df):
 """
 
 DEFAULT_SIGN_DICT="""signDict={
-    "Random":atb.RANDOM,
-    "RSI50":lambda x:atb.RSI(x,perc=50),
-    "MACD_10_20":atb.MACD,
-    "EMA":atb.EMA,
-    "SMA":atb.SMA,
-    "MFIandMACD_10_20":atb.AND_Indicator(atb.MFI,atb.MACD),
-    "MFIandRSI30":atb.AND_Indicator(atb.MFI,atb.RSI)
+    "Random":atb.RANDOM
 }"""
 signDict={
-    "Random":atb.RANDOM,
-    "RSI50":lambda x:atb.RSI(x,perc=50),
-    "MACD_10_20":atb.MACD,
-    "EMA":atb.EMA,
-    "SMA":atb.SMA,
-    "MFIandMACD_10_20":atb.AND_Indicator(atb.MFI,atb.MACD),
-    "MFIandRSI30":atb.AND_Indicator(atb.MFI,atb.RSI)
+    "Random":atb.RANDOM
 }
 
 def getIndicators(df):
@@ -105,12 +93,10 @@ def doConclude(data):
     return {"success":True}
 
 @socketio.on("doVisualize")
-def doVisualize(data):
-    print(data)
+def doConclude(data):
     MVL=vz.MultiVisualizor(data["folder"])
     MVL.drawFiles(data["X"],data["Y"])
-    return {"success":True,"figure_path":MVL.whole_path}
+    return {"success":True}
 
 if __name__ == '__main__':
-    while "\(-_-)/ True~":
-        socketio.run(app, host='127.0.0.1', port=5000)
+    socketio.run(app, host='127.0.0.1', port=5000,debug=1)

@@ -13,7 +13,6 @@
 
 <body>
     <div class="container">
-        <h4>Web UI for Strategenix</h4>
         <ul class="nav nav-tabs">
             <li><a href="/">TestBack</a></li>
             <li><a href="Conclude">Conclude</a></li>
@@ -44,22 +43,18 @@
             </div>
         </div>
         <button type="button" id="visualize_button" class="btn btn-success btn-block">Get Visualization</button>
-        <img id="figure">
+        <img>
     </div>
     <script>
         var socket = io.connect('http://' + document.domain + ':' + location.port);
         var folder = document.getElementById("folder");
         var X = document.getElementById("x-axis");
         var Y = document.getElementById("y-axis");
-        var figure=document.getElementById("figure");
         visualize_button.onclick = function () {
             console.log("in visualize_button func.");
             try {
                 socket.emit("doVisualize", { "folder": folder.value,"X":X.value,"Y":Y.value }, function (res) {
-                    if (res["success"]){
-                        // figure.src=res["figure_path"];
-                        alert("Successfully Updated.");
-                    }
+                    if (res["success"]) alert("Successfully Updated.")
                 });
             } catch (e) {
                 alert("Failed at Updating：" + e.message);

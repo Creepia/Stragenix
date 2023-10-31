@@ -109,8 +109,10 @@ def doVisualize(data):
     print(data)
     MVL=vz.MultiVisualizor(data["folder"])
     MVL.drawFiles(data["X"],data["Y"])
-    return {"success":True,"figure_path":MVL.whole_path}
+    path=data["folder"].split("/")[-1]
+    path=path.split("\\")[-1]
+    return {"success":True,"figure_path":path}
 
 if __name__ == '__main__':
     while "\(-_-)/ True~":
-        socketio.run(app, host='127.0.0.1', port=5000)
+        socketio.run(app, host='127.0.0.1', port=5000,debug=1)

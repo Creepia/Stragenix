@@ -57,7 +57,7 @@
             try {
                 socket.emit("doVisualize", { "folder": folder.value,"X":X.value,"Y":Y.value }, function (res) {
                     if (res["success"]){
-                        // figure.src=res["figure_path"];
+                        figure.src="Visualization/figure_{folder}.png";
                         alert("Successfully Updated.");
                     }
                 });

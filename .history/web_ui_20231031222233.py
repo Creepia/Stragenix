@@ -31,22 +31,10 @@ DEFAULT_INDI_FUNC="""def getIndicators(df):
 """
 
 DEFAULT_SIGN_DICT="""signDict={
-    "Random":atb.RANDOM,
-    "RSI50":lambda x:atb.RSI(x,perc=50),
-    "MACD_10_20":atb.MACD,
-    "EMA":atb.EMA,
-    "SMA":atb.SMA,
-    "MFIandMACD_10_20":atb.AND_Indicator(atb.MFI,atb.MACD),
-    "MFIandRSI30":atb.AND_Indicator(atb.MFI,atb.RSI)
+    "Random":atb.RANDOM
 }"""
 signDict={
-    "Random":atb.RANDOM,
-    "RSI50":lambda x:atb.RSI(x,perc=50),
-    "MACD_10_20":atb.MACD,
-    "EMA":atb.EMA,
-    "SMA":atb.SMA,
-    "MFIandMACD_10_20":atb.AND_Indicator(atb.MFI,atb.MACD),
-    "MFIandRSI30":atb.AND_Indicator(atb.MFI,atb.RSI)
+    "Random":atb.RANDOM
 }
 
 def getIndicators(df):
@@ -65,7 +53,7 @@ def Conclude():
 
 @app.route('/Visualization')
 def Visualization():
-    return render_template("Visualization.html", folder="Conclusion/output",X="avg_win_rate",Y="avg_return_rate")
+    return render_template("Visualization.html", folder="Test",X="avg_win_rate",Y="avg_return_rate")
 
 @socketio.on("updateIndicatorsFunctions")
 def updateIndicatorsFunctions(data):
@@ -104,13 +92,5 @@ def doConclude(data):
     CD.readFolder()
     return {"success":True}
 
-@socketio.on("doVisualize")
-def doVisualize(data):
-    print(data)
-    MVL=vz.MultiVisualizor(data["folder"])
-    MVL.drawFiles(data["X"],data["Y"])
-    return {"success":True,"figure_path":MVL.whole_path}
-
 if __name__ == '__main__':
-    while "\(-_-)/ True~":
-        socketio.run(app, host='127.0.0.1', port=5000)
+    socketio.run(app, host='127.0.0.1', port=5000,debug=1)

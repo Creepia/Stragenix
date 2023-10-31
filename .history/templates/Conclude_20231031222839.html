@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <head>
     <meta charset="UTF-8">
     <title>Web UI</title>
@@ -13,7 +12,6 @@
 
 <body>
     <div class="container">
-        <h4>Web UI for Strategenix</h4>
         <ul class="nav nav-tabs">
             <li><a href="/">TestBack</a></li>
             <li class="active"><a href="Conclude">Conclude</a></li>
@@ -22,13 +20,12 @@
 
         <div class="row">
             <label for="folder" class="col-sm-2 col-form-label">folder</label>
-            <div class="col-sm-10">
+            <div class="col-sm-8">
                 <input type="text" class="form-control" id="folder" name="folder" webkitdirectory directory required
                     value={{folder}}>
             </div>
-        </div>
-
         <button type="button" id="conclude_button" class="btn btn-success btn-block">Conclude</button>
+
     </div>
 
     <script>
@@ -37,7 +34,7 @@
         conclude_button.onclick = function () {
             console.log("in conclude_button func.");
             try {
-                socket.emit("doConclude", { "folder": folder.value }, function (res) {
+                socket.emit("doConclude", {"folder": folder.value}, function (res) {
                     if (res["success"]) alert("Successfully Updated.")
                 });
             } catch (e) {

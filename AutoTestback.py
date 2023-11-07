@@ -1,312 +1,1145 @@
-import os
-import talib as tal
-import random
-import numpy as np
-import pandas as pd
-random.seed(42)
-np.random.seed(42)
-
-
-"""def get_Signal(RSI,SMA,SAR,WPR,CCI,AXD,MACD,model_path):
-    model=tf.keras.models.load_model(model_path)
-    test_x=pd.concat(RSI,SMA,SAR,WPR,CCI,AXD,MACD)
-    for i in test_x:
-        test_x[i]=test_x[i]/(test_x[i].max())
-    test_x=np.reshape(test_x,test_x.shape+(1,))
-    Trend=model.predict(test_x)
-    Signal=pd.DataFrame(np.zeros(RSI.shape[0]))
-    hasShare=0
-    for i in range(RSI.shape[0]):
-        # if tomorrow will up, then buy.
-        if(Trend[i]==1 and hasShare==0):
-            Signal[i]=1
-            hasShare=1
-        elif(Trend[i]==0 and hasShare==1):
-            Signal[i]=2
-            hasShare=0
-    return Signal"""
-
-
-def append_df(df, A, ignore_index=True):
-    try:
-        if (df.empty):
-            return A
-        elif (A.empty):
-            return None
-        else:
-            return pd.concat([df, A], ignore_index=ignore_index)
-    except:
-        return pd.DataFrame()
-
-
-# When you want to check the data after adding the indicators, you may check this variable.
-debug_df=pd.DataFrame()
-class TestBackModel():
-    def __init__(self):
-        self.backtest = pd.DataFrame()
-        self.diff_list = []
-        self.win_rate = 0
-        self._name = "test_data"
-        self.total_returns = 0
-        self._signal_func_name=""
-
-    def setBuySignals(self, df: pd.DataFrame,get_indicator_func,get_signal_func,drop_na=True):
-        """
-        This method will apply the indicators for df. Then set self.buy_signals as the df with only Date,Close,Signal columns.
-        """
-        df = self.apply_indicators_and_signal_for_data(df,get_indicator_func,get_signal_func)
-        if (drop_na):
-            df = df.dropna()
-            df = df.reset_index(drop=True)
-        global debug_df
-        debug_df=df
-        self.buy_signals = pd.DataFrame(df.loc[:, ["Date", "Close", "Signal"]])
-
-    def setName(self, name: str):
-        self._name = name
-    def setSignalFunctionName(self, name: str):
-        self._signal_func_name = name
-
-    def setBuySignals_csv(self, filepath: str,get_indicator_func,get_signal_func, drop_na=True):
-        df = pd.read_csv(filepath)
-        self.setBuySignals(df=df,get_indicator_func=get_indicator_func,get_signal_func=get_signal_func,drop_na=drop_na)
-
-    def run(self ,initial_cash=1000000,save_log=""):
-        try:
-            shares = 0
-            position = "Hold"     # 当前仓位，默认为持仓
-            equity = initial_cash  # 初始资产等于初始资金
-            # 遍历每一行买入信号数据
-            for _, row in self.buy_signals.iterrows():
-                date = row['Date']
-                close = row['Close']
-                signal = row['Signal']
-
-                if signal == 1 and shares == 0:
-                    # 买入操作
-                    position = "Buy"
-                    shares += equity / close  # 计算可买入的股票数量
-                    equity = 0  # 资金置为0，全仓买入
-                elif signal == 2 and shares > 0:
-                    # 卖出操作
-                    position = "Sell"
-                    equity += shares * close
-                    shares = 0  # 持有股票数量置为0
-                else:
-                    position = ""
-                # 将回测结果添加到数据框中
-                self.backtest_row = pd.DataFrame(
-                    {'Date': date, 'Close': close, 'Signal': signal, 'Position': position, 'Equity': equity}, index=[0])
-                self.backtest = append_df(self.backtest, self.backtest_row)
-
-            col_list = list(self.backtest['Equity']
-                            [self.backtest['Equity'] != 0])
-            col_list = [float(x) for x in col_list]
-            clean_list = [col_list[0]] + [col_list[i]
-                                        for i in range(1, len(col_list)) if col_list[i] != col_list[i-1]]
-            self.diff_list = [clean_list[i+1] - clean_list[i]
-                            for i in range(len(clean_list)-1)]
-            # print([x > 0 for x in self.diff_list],self.diff_list)
-            self.win_rate = sum([x > 0 for x in self.diff_list]) / len(self.diff_list)
-            equity_series = self.backtest['Equity']
-            last_equity = equity_series.iloc[-1]
-            if last_equity == 0:
-                # 循环向前查找直到找到一个非零值
-                for i in range(len(equity_series) - 2, -1, -1):
-                    if equity_series.iloc[i] != 0:
-                        last_equity = equity_series.iloc[i]
-                        break
-            self.total_returns = (last_equity - initial_cash) / initial_cash
-            output_data = pd.DataFrame({'backtest_length': len(self.backtest), 'diff_list_length': len(self.diff_list), 'total_returns': self.total_returns, 'win_rate': self.win_rate}, index=[self._name])
-            print("Ran the backtest.")
-            if(save_log):
-                self.save_log(save_log)
-            return (output_data)
-        except Exception as e:
-            print(f"{self._name} running with a error: {e}")
-            return (pd.DataFrame({'backtest_length': None, 'diff_list_length': None, 'total_returns': None, 'win_rate': None}, index=[self._name]))
-
-    def run_folder(self, folder: str, get_indicator_func,get_signal_func,signal_func_name="",initial_cash=1000000, drop_na=True,save_log="",print_output=True,output_folder="Conclusion"):
-        self.setSignalFunctionName(signal_func_name)
-        output=pd.DataFrame({'backtest_length': None, 'diff_list_length': None, 'total_returns': None, 'win_rate': None}, index=[""])
-        if not os.path.exists(output_folder+"/"+folder):
-            os.mkdir(output_folder+"/"+folder)
-        output.to_csv(output_folder+"/"+folder+"/total_output_"+self._signal_func_name+".csv",mode="w")
-        for file_path in os.listdir(folder):
-            if ("output" in file_path) or file_path[-11:]=="_result.csv" or file_path[-4:]!=".csv":
-                continue
-            filepath = folder + "/" + file_path
-            self.setName(file_path[:-4])
-            print(f"Runnning {self._name} with {self._signal_func_name}")
-            try:
-                self.setBuySignals_csv(filepath, get_indicator_func,get_signal_func,drop_na)
-                output=self.run(initial_cash=initial_cash,save_log=save_log)
-                output.to_csv(output_folder+"/"+folder+"/total_output_"+self._signal_func_name+".csv",mode="a",header=False)
-                if print_output:
-                    print(output)
-            except Exception as e:
-                print(e)
-                print("Error at running the dataframe,Skip.")
-            self.backtest=None
-            print("====================")
-
-    def save_log(self, folder_name):
-        try:
-            if (not os.path.exists(folder_name)):
-                os.makedirs(folder_name)
-            self.backtest.to_csv(folder_name+"/"+self._name+"_result_"+self._signal_func_name+".csv", index=False, mode="w")
-            print("Output is Saved.")
-        except Exception as e:
-            print(f"{self._name} saving with a error: {e}")
-
-    def apply_indicators_for_data(self,df,get_indicator_func):
-        if(df.empty):
-            print("Cannot find data thus failed at applying indicators")
-            return df
-        elif ("Close" in df):
-            df=get_indicator_func(df)
-        else:
-            print("Cannot find data thus failed at applying indicators")
-        return df
-    
-    def apply_signal_for_data(self,df,get_signal_func):
-        if("Close" in df):
-            df["Signal"]=0
-            df=get_signal_func(df)
-            return df
-
-    def apply_indicators_and_signal_for_data(self,df,get_indicator_func,get_signal_func):
-        """
-        Parameters
-        -----
-        get_indicator_func\n
-        get_signal_func
-        The two functions both returns a complete DataFrame
-        """
-        df=self.apply_indicators_for_data(df=df,get_indicator_func=get_indicator_func)
-        df=self.apply_signal_for_data(df=df,get_signal_func=get_signal_func)
-        return df
-
-class SignalGeneartor():
-    def __init__(self, decisions={}):
-        """
-        decisions {str:function}.
-        eg. {"RSI":get_RSI}
-        """
-        self.decisions = decisions
-
-    def addDecisions(self, decisions={}):
-        self.decisions = {**self.decisions, **decisions}
-
-    def getDecisions(self):
-        return self.decisions
-    
-    def NextDecision(self):
-        for name,func in self.getDecisions().items():
-            yield (name,func)
-
-
-def get_WPR(High, Low, Close, n):
-    H_n = High.rolling(n).max()
-    L_n = Low.rolling(n).min()
-    return (H_n-Close)/(H_n-L_n) * 100
-
-def get_KD(data, window=14, k=3, d=3):
-    # Calculate %K
-    data['L14'] = data['Low'].rolling(window=window).min()
-    data['H14'] = data['High'].rolling(window=window).max()
-    data['%K'] = 100*((data['Close'] - data['L14']) / (data['H14'] - data['L14']))
-    # Calculate %D
-    data['%D'] = data['%K'].rolling(window=d).mean()
-    return data
-
-def get_RVI(df, n=10):
-    # Calculate RVI numerator
-    df['RVI_Numerator'] = (df['Close'] - df['Open']) / (df['High'] - df['Low'])
-    # Calculate N period SMA for RVI
-    df['RVI_SMA'] = df['RVI_Numerator'].rolling(window=n).mean()
-    return df
-
-def getIndicators(df):
-    df["RSI"] = tal.RSI(df["Close"])
-    df["SMA"] = tal.SMA(df["Close"])
-    df["SAR"] = tal.SAR(df["High"], df["Low"], 0.02, 0.2)
-    df["WPR"] = get_WPR(df["High"], df["Low"], df["Close"], 14)
-    df["CCI"] = tal.CCI(df["High"], df["Low"], df["Close"], 20)
-    df["ADX"] = tal.ADX(df["High"], df["Low"], df["Close"])
-    _, _, df["MACD"] = tal.MACD(df["Close"], fastperiod=10, slowperiod=20, signalperiod=9)
-    df=get_KD(df,window=14,k=3,d=2)
-    df["-DI"]=tal.MINUS_DI(df["High"], df["Low"], df["Close"], timeperiod=14)
-    df["+DI"]=tal.MINUS_DI(df["High"], df["Low"], df["Close"], timeperiod=14)
-    df["ADXR"]=tal.ADXR(df["High"], df["Low"], df["Close"], timeperiod=14)
-    df["MFI"]=tal.MFI(df["High"], df["Low"], df["Close"],df["Volume"] ,timeperiod=14)
-    df["EMA"]=tal.EMA(np.array(df["Close"]), timeperiod = 6)
-    df=get_RVI(df,n=10)
-    df["OBV"] = tal.OBV(df["Close"], df['Volume'])
-    return df
-
-def RANDOM(df):
-    df['Signal'] = pd.DataFrame(np.random.randint(0,3,size=(df.shape[0],1)))
-    return df
-
-def MACD(df):
-    MACD=df["MACD"]
-    Signal = pd.DataFrame(np.zeros(MACD.shape[0]))
-
-    Signal[MACD < 0] = 1  # buy
-    Signal[MACD > 0] = 2  # sell
-
-    df["Signal"]=Signal
-    return df
-
-def RSI(df,perc=30):
-    RSI=df["RSI"]
-    Signal=pd.DataFrame(np.zeros(RSI.shape[0]))
-    Signal[RSI<perc]=1 # buy
-    Signal[RSI>100-perc]=2 # sell
-    df["Signal"]=Signal
-    return df
-
-def EMA(df):
-    EMA=df["EMA"]
-    Close=df["Close"]
-    Signal=pd.DataFrame(np.zeros(EMA.shape[0]))
-    Signal[Close<EMA]=1
-    Signal[Close>EMA]=2
-    df["Signal"]=Signal
-    return df
-
-def SMA(df):
-    SMA=df["SMA"]
-    Close=df["Close"]
-    Signal=pd.DataFrame(np.zeros(SMA.shape[0]))
-    Signal[Close<SMA]=1
-    Signal[Close>SMA]=2
-    df["Signal"]=Signal
-    return df
-
-def MFI(df,perc=20):
-    MFI=df["MFI"]
-    Signal=pd.DataFrame(np.zeros(MFI.shape[0]))
-    Signal[MFI<perc]=1 # buy
-    Signal[MFI>100-perc]=2 # sell
-    df["Signal"]=Signal
-    return df
-
-def AND_Indicator(*indi_funcs):
-    def AND(df):
-        sigs=[indi_func(df.copy())["Signal"] for indi_func in indi_funcs]
-        Signal=pd.DataFrame(np.zeros(df.shape[0]))
-        # the i_th row
-        for i in range(df.shape[0]):
-            # pivot is the first signal of the first indicator
-            pivot=0 if sigs[0].iloc[i]==0 else sigs[0].iloc[i]
-            # the j_th indicator
-            for j in range(1,len(sigs)):
-                if sigs[j].iloc[i]!=pivot:
-                    pivot=0
-                    break
-            Signal.iloc[i]=pivot
-        df["Signal"]=Signal
-        return df
-    return AND
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "__The first cell is defining classes and other global functions__"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import os\n",
+    "import talib as tal\n",
+    "import random\n",
+    "import numpy as np\n",
+    "import pandas as pd\n",
+    "random.seed(42)\n",
+    "np.random.seed(42)\n",
+    "\n",
+    "\n",
+    "\"\"\"def get_Signal(RSI,SMA,SAR,WPR,CCI,AXD,MACD,model_path):\n",
+    "    model=tf.keras.models.load_model(model_path)\n",
+    "    test_x=pd.concat(RSI,SMA,SAR,WPR,CCI,AXD,MACD)\n",
+    "    for i in test_x:\n",
+    "        test_x[i]=test_x[i]/(test_x[i].max())\n",
+    "    test_x=np.reshape(test_x,test_x.shape+(1,))\n",
+    "    Trend=model.predict(test_x)\n",
+    "    Signal=pd.DataFrame(np.zeros(RSI.shape[0]))\n",
+    "    hasShare=0\n",
+    "    for i in range(RSI.shape[0]):\n",
+    "        # if tomorrow will up, then buy.\n",
+    "        if(Trend[i]==1 and hasShare==0):\n",
+    "            Signal[i]=1\n",
+    "            hasShare=1\n",
+    "        elif(Trend[i]==0 and hasShare==1):\n",
+    "            Signal[i]=2\n",
+    "            hasShare=0\n",
+    "    return Signal\"\"\"\n",
+    "\n",
+    "\n",
+    "def append_df(df, A, ignore_index=True):\n",
+    "    try:\n",
+    "        if (df.empty):\n",
+    "            return A\n",
+    "        elif (A.empty):\n",
+    "            return None\n",
+    "        else:\n",
+    "            return pd.concat([df, A], ignore_index=ignore_index)\n",
+    "    except:\n",
+    "        return pd.DataFrame()\n",
+    "\n",
+    "\n",
+    "# When you want to check the data after adding the indicators, you may check this variable.\n",
+    "debug_df=pd.DataFrame()\n",
+    "class TestBackModel():\n",
+    "    def __init__(self):\n",
+    "        self.backtest = pd.DataFrame()\n",
+    "        self.diff_list = []\n",
+    "        self.win_rate = 0\n",
+    "        self._name = \"test_data\"\n",
+    "        self.total_returns = 0\n",
+    "        self._signal_func_name=\"\"\n",
+    "\n",
+    "    def setBuySignals(self, df: pd.DataFrame,get_indicator_func,get_signal_func,drop_na=True):\n",
+    "        \"\"\"\n",
+    "        This method will apply the indicators for df. Then set self.buy_signals as the df with only Date,Close,Signal columns.\n",
+    "        \"\"\"\n",
+    "        df = self.apply_indicators_and_signal_for_data(df,get_indicator_func,get_signal_func)\n",
+    "        if (drop_na):\n",
+    "            df = df.dropna()\n",
+    "            df = df.reset_index(drop=True)\n",
+    "        global debug_df\n",
+    "        debug_df=df\n",
+    "        self.buy_signals = pd.DataFrame(df.loc[:, [\"Date\", \"Close\", \"Signal\"]])\n",
+    "\n",
+    "    def setName(self, name: str):\n",
+    "        self._name = name\n",
+    "    def setSignalFunctionName(self, name: str):\n",
+    "        self._signal_func_name = name\n",
+    "\n",
+    "    def setBuySignals_csv(self, filepath: str,get_indicator_func,get_signal_func, drop_na=True):\n",
+    "        df = pd.read_csv(filepath)\n",
+    "        self.setBuySignals(df=df,get_indicator_func=get_indicator_func,get_signal_func=get_signal_func,drop_na=drop_na)\n",
+    "\n",
+    "    def run(self ,initial_cash=1000000,save_log=\"\"):\n",
+    "        try:\n",
+    "            shares = 0\n",
+    "            position = \"Hold\"     # 当前仓位，默认为持仓\n",
+    "            equity = initial_cash  # 初始资产等于初始资金\n",
+    "            # 遍历每一行买入信号数据\n",
+    "            for _, row in self.buy_signals.iterrows():\n",
+    "                date = row['Date']\n",
+    "                close = row['Close']\n",
+    "                signal = row['Signal']\n",
+    "\n",
+    "                if signal == 1 and shares == 0:\n",
+    "                    # 买入操作\n",
+    "                    position = \"Buy\"\n",
+    "                    shares += equity / close  # 计算可买入的股票数量\n",
+    "                    equity = 0  # 资金置为0，全仓买入\n",
+    "                elif signal == 2 and shares > 0:\n",
+    "                    # 卖出操作\n",
+    "                    position = \"Sell\"\n",
+    "                    equity += shares * close\n",
+    "                    shares = 0  # 持有股票数量置为0\n",
+    "                else:\n",
+    "                    position = \"\"\n",
+    "                # 将回测结果添加到数据框中\n",
+    "                self.backtest_row = pd.DataFrame(\n",
+    "                    {'Date': date, 'Close': close, 'Signal': signal, 'Position': position, 'Equity': equity}, index=[0])\n",
+    "                self.backtest = append_df(self.backtest, self.backtest_row)\n",
+    "\n",
+    "            col_list = list(self.backtest['Equity']\n",
+    "                            [self.backtest['Equity'] != 0])\n",
+    "            col_list = [float(x) for x in col_list]\n",
+    "            clean_list = [col_list[0]] + [col_list[i]\n",
+    "                                          for i in range(1, len(col_list)) if col_list[i] != col_list[i-1]]\n",
+    "            self.diff_list = [clean_list[i+1] - clean_list[i]\n",
+    "                              for i in range(len(clean_list)-1)]\n",
+    "            # print([x > 0 for x in self.diff_list],self.diff_list)\n",
+    "            self.win_rate = sum([x > 0 for x in self.diff_list]) / len(self.diff_list)\n",
+    "            equity_series = self.backtest['Equity']\n",
+    "            last_equity = equity_series.iloc[-1]\n",
+    "            if last_equity == 0:\n",
+    "                # 循环向前查找直到找到一个非零值\n",
+    "                for i in range(len(equity_series) - 2, -1, -1):\n",
+    "                    if equity_series.iloc[i] != 0:\n",
+    "                        last_equity = equity_series.iloc[i]\n",
+    "                        break\n",
+    "            self.total_returns = (last_equity - initial_cash) / initial_cash\n",
+    "            output_data = pd.DataFrame({'backtest_length': len(self.backtest), 'diff_list_length': len(self.diff_list), 'total_returns': self.total_returns, 'win_rate': self.win_rate}, index=[self._name])\n",
+    "            print(\"Ran the backtest.\")\n",
+    "            if(save_log):\n",
+    "                self.save_log(save_log)\n",
+    "            return (output_data)\n",
+    "        except Exception as e:\n",
+    "            print(f\"{self._name} running with a error: {e}\")\n",
+    "            return (pd.DataFrame({'backtest_length': None, 'diff_list_length': None, 'total_returns': None, 'win_rate': None}, index=[self._name]))\n",
+    "\n",
+    "    def run_folder(self, folder: str, get_indicator_func,get_signal_func,signal_func_name=\"\",initial_cash=1000000, drop_na=True,save_log=\"\",print_output=True,output_folder=\"Conclusion\"):\n",
+    "        self.setSignalFunctionName(signal_func_name)\n",
+    "        output=pd.DataFrame({'backtest_length': None, 'diff_list_length': None, 'total_returns': None, 'win_rate': None}, index=[\"\"])\n",
+    "        output.to_csv(output_folder+\"/\"+folder+\"/total_output_\"+self._signal_func_name+\".csv\",mode=\"w\")\n",
+    "        for file_path in os.listdir(folder):\n",
+    "            if (\"output\" in file_path) or file_path[-11:]==\"_result.csv\" or file_path[-4:]!=\".csv\":\n",
+    "                continue\n",
+    "            filepath = folder + \"/\" + file_path\n",
+    "            self.setName(file_path[:-4])\n",
+    "            print(f\"Runnning {self._name} with {self._signal_func_name}\")\n",
+    "            try:\n",
+    "                self.setBuySignals_csv(filepath, get_indicator_func,get_signal_func,drop_na)\n",
+    "                output=self.run(initial_cash=initial_cash,save_log=save_log)\n",
+    "                output.to_csv(folder+f\"/total_output_\"+self._signal_func_name+\".csv\",mode=\"a\",header=False)\n",
+    "                if print_output:\n",
+    "                    print(output)\n",
+    "            except Exception as e:\n",
+    "                print(e)\n",
+    "                print(\"Error at running the dataframe,Skip.\")\n",
+    "            self.backtest=None\n",
+    "            print(\"====================\")\n",
+    "\n",
+    "    def save_log(self, folder_name):\n",
+    "        try:\n",
+    "            if (not os.path.exists(folder_name)):\n",
+    "                os.makedirs(folder_name)\n",
+    "            self.backtest.to_csv(folder_name+\"/\"+self._name+\"_result_\"+self._signal_func_name+\".csv\", index=False, mode=\"w\")\n",
+    "            print(\"Output is Saved.\")\n",
+    "        except Exception as e:\n",
+    "            print(f\"{self._name} saving with a error: {e}\")\n",
+    "\n",
+    "    def apply_indicators_for_data(self,df,get_indicator_func):\n",
+    "        if(df.empty):\n",
+    "            print(\"Cannot find data thus failed at applying indicators\")\n",
+    "            return df\n",
+    "        elif (\"Close\" in df):\n",
+    "            df=get_indicator_func(df)\n",
+    "        else:\n",
+    "            print(\"Cannot find data thus failed at applying indicators\")\n",
+    "        return df\n",
+    "    \n",
+    "    def apply_signal_for_data(self,df,get_signal_func):\n",
+    "        if(\"Close\" in df):\n",
+    "            df[\"Signal\"]=0\n",
+    "            df=get_signal_func(df)\n",
+    "            return df\n",
+    "\n",
+    "    def apply_indicators_and_signal_for_data(self,df,get_indicator_func,get_signal_func):\n",
+    "        \"\"\"\n",
+    "        Parameters\n",
+    "        -----\n",
+    "        get_indicator_func\\n\n",
+    "        get_signal_func\n",
+    "        The two functions both returns a complete DataFrame\n",
+    "        \"\"\"\n",
+    "        df=self.apply_indicators_for_data(df=df,get_indicator_func=get_indicator_func)\n",
+    "        df=self.apply_signal_for_data(df=df,get_signal_func=get_signal_func)\n",
+    "        return df\n",
+    "\n",
+    "class SignalGeneartor():\n",
+    "    def __init__(self, decisions={}):\n",
+    "        \"\"\"\n",
+    "        decisions {str:function}.\n",
+    "        eg. {\"RSI\":get_RSI}\n",
+    "        \"\"\"\n",
+    "        self.decisions = decisions\n",
+    "\n",
+    "    def addDecisions(self, decisions={}):\n",
+    "        self.decisions = {**self.decisions, **decisions}\n",
+    "\n",
+    "    def getDecisions(self):\n",
+    "        return self.decisions\n",
+    "    \n",
+    "    def NextDecision(self):\n",
+    "        for name,func in self.getDecisions().items():\n",
+    "            yield (name,func)\n",
+    "\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "__This cell are complemental functions for indicator calculation__"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def get_WPR(High, Low, Close, n):\n",
+    "    H_n = High.rolling(n).max()\n",
+    "    L_n = Low.rolling(n).min()\n",
+    "    return (H_n-Close)/(H_n-L_n) * 100\n",
+    "\n",
+    "def get_KD(data, window=14, k=3, d=3):\n",
+    "    # Calculate %K\n",
+    "    data['L14'] = data['Low'].rolling(window=window).min()\n",
+    "    data['H14'] = data['High'].rolling(window=window).max()\n",
+    "    data['%K'] = 100*((data['Close'] - data['L14']) / (data['H14'] - data['L14']))\n",
+    "    # Calculate %D\n",
+    "    data['%D'] = data['%K'].rolling(window=d).mean()\n",
+    "    return data\n",
+    "\n",
+    "def get_RVI(df, n=10):\n",
+    "    # Calculate RVI numerator\n",
+    "    df['RVI_Numerator'] = (df['Close'] - df['Open']) / (df['High'] - df['Low'])\n",
+    "    # Calculate N period SMA for RVI\n",
+    "    df['RVI_SMA'] = df['RVI_Numerator'].rolling(window=n).mean()\n",
+    "    return df\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "__The cell below is for editing__"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def getIndicators(df):\n",
+    "    df[\"RSI\"] = tal.RSI(df[\"Close\"])\n",
+    "    df[\"SMA\"] = tal.SMA(df[\"Close\"])\n",
+    "    df[\"SAR\"] = tal.SAR(df[\"High\"], df[\"Low\"], 0.02, 0.2)\n",
+    "    df[\"WPR\"] = get_WPR(df[\"High\"], df[\"Low\"], df[\"Close\"], 14)\n",
+    "    df[\"CCI\"] = tal.CCI(df[\"High\"], df[\"Low\"], df[\"Close\"], 20)\n",
+    "    df[\"ADX\"] = tal.ADX(df[\"High\"], df[\"Low\"], df[\"Close\"])\n",
+    "    _, _, df[\"MACD\"] = tal.MACD(df[\"Close\"], fastperiod=10, slowperiod=20, signalperiod=9)\n",
+    "    df=get_KD(df,window=14,k=3,d=2)\n",
+    "    df[\"-DI\"]=tal.MINUS_DI(df[\"High\"], df[\"Low\"], df[\"Close\"], timeperiod=14)\n",
+    "    df[\"+DI\"]=tal.MINUS_DI(df[\"High\"], df[\"Low\"], df[\"Close\"], timeperiod=14)\n",
+    "    df[\"ADXR\"]=tal.ADXR(df[\"High\"], df[\"Low\"], df[\"Close\"], timeperiod=14)\n",
+    "    df[\"MFI\"]=tal.MFI(df[\"High\"], df[\"Low\"], df[\"Close\"],df[\"Volume\"] ,timeperiod=14)\n",
+    "    df[\"EMA\"]=tal.EMA(np.array(df[\"Close\"]), timeperiod = 6)\n",
+    "    df=get_RVI(df,n=10)\n",
+    "    df[\"OBV\"] = tal.OBV(df[\"Close\"], df['Volume'])\n",
+    "\n",
+    "    return df\n",
+    "\n",
+    "def RANDOM(df):\n",
+    "    df['Signal'] = pd.DataFrame(np.random.randint(0,3,size=(df.shape[0],1)))\n",
+    "    return df\n",
+    "\n",
+    "def MACD(df):\n",
+    "    MACD=df[\"MACD\"]\n",
+    "    Signal = pd.DataFrame(np.zeros(MACD.shape[0]))\n",
+    "\n",
+    "    Signal[MACD < 0] = 1  # buy\n",
+    "    Signal[MACD > 0] = 2  # sell\n",
+    "\n",
+    "    df[\"Signal\"]=Signal\n",
+    "    return df\n",
+    "\n",
+    "def RSI(df,perc=30):\n",
+    "    RSI=df[\"RSI\"]\n",
+    "    Signal=pd.DataFrame(np.zeros(RSI.shape[0]))\n",
+    "    Signal[RSI<perc]=1 # buy\n",
+    "    Signal[RSI>100-perc]=2 # sell\n",
+    "    df[\"Signal\"]=Signal\n",
+    "    return df\n",
+    "\n",
+    "def EMA(df):\n",
+    "    EMA=df[\"EMA\"]\n",
+    "    Close=df[\"Close\"]\n",
+    "    Signal=pd.DataFrame(np.zeros(EMA.shape[0]))\n",
+    "    Signal[Close<EMA]=1\n",
+    "    Signal[Close>EMA]=2\n",
+    "    df[\"Signal\"]=Signal\n",
+    "    return df\n",
+    "\n",
+    "def SMA(df):\n",
+    "    SMA=df[\"SMA\"]\n",
+    "    Close=df[\"Close\"]\n",
+    "    Signal=pd.DataFrame(np.zeros(SMA.shape[0]))\n",
+    "    Signal[Close<SMA]=1\n",
+    "    Signal[Close>SMA]=2\n",
+    "    df[\"Signal\"]=Signal\n",
+    "    return df\n",
+    "\n",
+    "def MFI(df,perc=20):\n",
+    "    MFI=df[\"MFI\"]\n",
+    "    Signal=pd.DataFrame(np.zeros(MFI.shape[0]))\n",
+    "    Signal[MFI<perc]=1 # buy\n",
+    "    Signal[MFI>100-perc]=2 # sell\n",
+    "    df[\"Signal\"]=Signal\n",
+    "    return df\n",
+    "\n",
+    "def AND_Indicator(*indi_funcs):\n",
+    "    def AND(df):\n",
+    "        sigs=[indi_func(df.copy())[\"Signal\"] for indi_func in indi_funcs]\n",
+    "        Signal=pd.DataFrame(np.zeros(df.shape[0]))\n",
+    "        # the i_th row\n",
+    "        for i in range(df.shape[0]):\n",
+    "            # pivot is the first signal of the first indicator\n",
+    "            pivot=0 if sigs[0].iloc[i]==0 else sigs[0].iloc[i]\n",
+    "            # the j_th indicator\n",
+    "            for j in range(1,len(sigs)):\n",
+    "                if sigs[j].iloc[i]!=pivot:\n",
+    "                    pivot=0\n",
+    "                    break\n",
+    "            Signal.iloc[i]=pivot\n",
+    "        df[\"Signal\"]=Signal\n",
+    "        return df\n",
+    "    return AND\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "__This cell is just for running__"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Runnning AAPL with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "AAPL             5243               833       2.778884  0.531813\n",
+      "====================\n",
+      "Runnning ABNB with Random\n",
+      "ABNB running with a error: 'NoneType' object is not subscriptable\n",
+      "     backtest_length diff_list_length total_returns win_rate\n",
+      "ABNB            None             None          None     None\n",
+      "====================\n",
+      "Runnning ADBE with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "ADBE             5242               878        1.67599   0.53303\n",
+      "====================\n",
+      "Runnning ADI with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "     backtest_length  diff_list_length  total_returns  win_rate\n",
+      "ADI             5242               861       0.822245  0.505226\n",
+      "====================\n",
+      "Runnning ADP with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "     backtest_length  diff_list_length  total_returns  win_rate\n",
+      "ADP             5242               882       0.665332  0.528345\n",
+      "====================\n",
+      "Runnning ADSK with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "ADSK             5242               890       0.627558  0.549438\n",
+      "====================\n",
+      "Runnning AEP with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "     backtest_length  diff_list_length  total_returns  win_rate\n",
+      "AEP             5242               864       0.886273   0.53125\n",
+      "====================\n",
+      "Runnning ALGN with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "ALGN             4971               795      21.339324  0.501887\n",
+      "====================\n",
+      "Runnning AMAT with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "AMAT             5242               877       7.549014  0.530217\n",
+      "====================\n",
+      "Runnning AMD with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "     backtest_length  diff_list_length  total_returns  win_rate\n",
+      "AMD             5232               889      -0.279026  0.507312\n",
+      "====================\n",
+      "Runnning AMGN with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "AMGN             5242               871       1.971845  0.531573\n",
+      "====================\n",
+      "Runnning AMZN with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "AMZN             5242               862      -0.509689  0.517401\n",
+      "====================\n",
+      "Runnning ANSS with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "ANSS             5232               865      29.562979  0.559538\n",
+      "====================\n",
+      "Runnning ASML with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "ASML             5242               858       8.997446  0.524476\n",
+      "====================\n",
+      "Runnning ATVI with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "ATVI             5242               849     124.128764  0.566549\n",
+      "====================\n",
+      "Runnning AVGO with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "AVGO             2830               478       2.606206  0.535565\n",
+      "====================\n",
+      "Runnning BIDU with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "BIDU             3837               627      26.265567  0.521531\n",
+      "====================\n",
+      "Runnning BIIB with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "BIIB             5221               885       1.395085  0.516384\n",
+      "====================\n",
+      "Runnning BKNG with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "BKNG             5242               860       0.001359  0.536047\n",
+      "====================\n",
+      "Runnning CDNS with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "CDNS             5242               859       1.430131  0.535506\n",
+      "====================\n",
+      "Runnning CHTR with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "CHTR             2601               424       3.847493  0.561321\n",
+      "====================\n",
+      "Runnning CMCSA with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "       backtest_length  diff_list_length  total_returns  win_rate\n",
+      "CMCSA             5242               872       0.784222  0.514908\n",
+      "====================\n",
+      "Runnning COST with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "COST             5242               863       1.550512  0.542294\n",
+      "====================\n",
+      "Runnning CPRT with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "CPRT             5242               862      17.036959  0.548724\n",
+      "====================\n",
+      "Runnning CRWD with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "CRWD              352                55      -0.261732  0.527273\n",
+      "====================\n",
+      "Runnning CSCO with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "CSCO             5242               886      -0.134983  0.518059\n",
+      "====================\n",
+      "Runnning CSX with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "     backtest_length  diff_list_length  total_returns  win_rate\n",
+      "CSX             5242               868      11.961273  0.534562\n",
+      "====================\n",
+      "Runnning CTAS with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "CTAS             5242               861      -0.368272  0.519164\n",
+      "====================\n",
+      "Runnning CTSH with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "CTSH             5242               866      15.110684  0.548499\n",
+      "====================\n",
+      "Runnning DDOG with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "DDOG              283                46       1.839661  0.673913\n",
+      "====================\n",
+      "Runnning DLTR with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "DLTR             5242               838       2.304703  0.539379\n",
+      "====================\n",
+      "Runnning DOCU with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "DOCU              634               108       2.279009  0.574074\n",
+      "====================\n",
+      "Runnning DXCM with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "DXCM             3906               658      25.786021  0.548632\n",
+      "====================\n",
+      "Runnning EA with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "    backtest_length  diff_list_length  total_returns  win_rate\n",
+      "EA             5242               874       0.822753  0.517162\n",
+      "====================\n",
+      "Runnning EBAY with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "EBAY             5242               871      -0.117748  0.506315\n",
+      "====================\n",
+      "Runnning EXC with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "     backtest_length  diff_list_length  total_returns  win_rate\n",
+      "EXC             5242               903       0.729676  0.528239\n",
+      "====================\n",
+      "Runnning FAST with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "FAST             5242               842       1.614931  0.517815\n",
+      "====================\n",
+      "Runnning FTNT with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "FTNT             2757               458       2.003072  0.532751\n",
+      "====================\n",
+      "Runnning GILD with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "GILD             5221               862       0.134418  0.517401\n",
+      "====================\n",
+      "Runnning GOOG with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "GOOG             4080               694       1.216663  0.517291\n",
+      "====================\n",
+      "Runnning GOOGL with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "       backtest_length  diff_list_length  total_returns  win_rate\n",
+      "GOOGL             4080               682       1.486297  0.529326\n",
+      "====================\n",
+      "Runnning HON with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "     backtest_length  diff_list_length  total_returns  win_rate\n",
+      "HON             5242               862       0.522382  0.525522\n",
+      "====================\n",
+      "Runnning IDXX with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "IDXX             5242               880       7.024736  0.567045\n",
+      "====================\n",
+      "Runnning ILMN with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "ILMN             5098               839       0.236901   0.54112\n",
+      "====================\n",
+      "Runnning INTC with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "INTC             5242               866      -0.659945       0.5\n",
+      "====================\n",
+      "Runnning INTU with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "INTU             5242               889       6.672819  0.530934\n",
+      "====================\n",
+      "Runnning ISRG with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "ISRG             5127               860        8.96475  0.539535\n",
+      "====================\n",
+      "Runnning JD with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "    backtest_length  diff_list_length  total_returns  win_rate\n",
+      "JD             1624               268       0.908469  0.533582\n",
+      "====================\n",
+      "Runnning KDP with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "     backtest_length  diff_list_length  total_returns  win_rate\n",
+      "KDP             3145               516      -0.725968       0.5\n",
+      "====================\n",
+      "Runnning KHC with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "     backtest_length  diff_list_length  total_returns  win_rate\n",
+      "KHC             1343               211      -0.161087  0.535545\n",
+      "====================\n",
+      "Runnning KLAC with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "KLAC             5242               861      -0.477077  0.506388\n",
+      "====================\n",
+      "Runnning LCID with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "LCID               31                 4       0.014352       1.0\n",
+      "====================\n",
+      "Runnning LRCX with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "LRCX             5242               898        0.96182  0.523385\n",
+      "====================\n",
+      "Runnning LULU with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "LULU             3341               561       21.13909  0.545455\n",
+      "====================\n",
+      "Runnning MAR with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "     backtest_length  diff_list_length  total_returns  win_rate\n",
+      "MAR             5242               843       1.386811  0.525504\n",
+      "====================\n",
+      "Runnning MCHP with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "MCHP             5242               869       1.678435  0.515535\n",
+      "====================\n",
+      "Runnning MDLZ with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "MDLZ             4878               813       0.198055  0.522755\n",
+      "====================\n",
+      "Runnning MELI with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "MELI             3331               552     175.919601  0.592391\n",
+      "====================\n",
+      "Runnning MNST with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "MNST             4708               781     306.446957  0.553137\n",
+      "====================\n",
+      "Runnning MRNA with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "MRNA              479                78        2.37016  0.551282\n",
+      "====================\n",
+      "Runnning MRVL with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "MRVL             5117               832       2.698289  0.516827\n",
+      "====================\n",
+      "Runnning MSFT with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "MSFT             5242               868       6.536189  0.521889\n",
+      "====================\n",
+      "Runnning MTCH with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "MTCH             5242               827       1.744856  0.512696\n",
+      "====================\n",
+      "Runnning MU with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "    backtest_length  diff_list_length  total_returns  win_rate\n",
+      "MU             5242               820       0.360065   0.50122\n",
+      "====================\n",
+      "Runnning NFLX with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "NFLX             4644               764       2.136369       0.5\n",
+      "====================\n",
+      "Runnning NTES with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "NTES             4888               782       3.899762  0.530691\n",
+      "====================\n",
+      "Runnning NVDA with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "NVDA             5242               889       4.345625  0.517435\n",
+      "====================\n",
+      "Runnning NXPI with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "NXPI             2578               408       5.636297  0.558824\n",
+      "====================\n",
+      "Runnning ODFL with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "ODFL             4696               775      13.897446  0.522581\n",
+      "====================\n",
+      "Runnning OKTA with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "OKTA              899               143       3.533893  0.587413\n",
+      "====================\n",
+      "Runnning ORLY with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "ORLY             5242               887      11.469604  0.538895\n",
+      "====================\n",
+      "Runnning PANW with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "PANW             2085               347       6.077484   0.51585\n",
+      "====================\n",
+      "Runnning PAYX with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "PAYX             5242               860      -0.334618  0.523256\n",
+      "====================\n",
+      "Runnning PCAR with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "PCAR             5242               874       1.170648  0.529748\n",
+      "====================\n",
+      "Runnning PDD with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "     backtest_length  diff_list_length  total_returns  win_rate\n",
+      "PDD              572               104       1.958368  0.538462\n",
+      "====================\n",
+      "Runnning PEP with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "     backtest_length  diff_list_length  total_returns  win_rate\n",
+      "PEP             5242               884        0.50015  0.502262\n",
+      "====================\n",
+      "Runnning PYPL with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "PYPL             1343               230       3.323948  0.604348\n",
+      "====================\n",
+      "Runnning QCOM with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "QCOM             5242               863       1.468125  0.513326\n",
+      "====================\n",
+      "Runnning REGN with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "REGN             5232               851       0.469455  0.501763\n",
+      "====================\n",
+      "Runnning ROST with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "ROST             5242               879      16.796726  0.547213\n",
+      "====================\n",
+      "Runnning SBUX with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "SBUX             5242               873       4.269992  0.549828\n",
+      "====================\n",
+      "Runnning SGEN with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "SGEN             4934               825       1.766787  0.526061\n",
+      "====================\n",
+      "Runnning SIRI with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "SIRI             5216               844      -0.979937  0.491706\n",
+      "====================\n",
+      "Runnning SNPS with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "SNPS             5242               826       8.890013  0.558111\n",
+      "====================\n",
+      "Runnning SPLK with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "SPLK             2149               355       1.255099  0.577465\n",
+      "====================\n",
+      "Runnning SWKS with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "SWKS             5242               870      -0.816835  0.503448\n",
+      "====================\n",
+      "Runnning TEAM with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "TEAM             1233               205       1.567259  0.531707\n",
+      "====================\n",
+      "Runnning TMUS with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "TMUS             3410               569       0.405394  0.550088\n",
+      "====================\n",
+      "Runnning TSLA with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "TSLA             2605               433      10.692977  0.549654\n",
+      "====================\n",
+      "Runnning TXN with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "     backtest_length  diff_list_length  total_returns  win_rate\n",
+      "TXN             5242               870       0.688244  0.521839\n",
+      "====================\n",
+      "Runnning VRSK with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "VRSK             2787               486       0.599852  0.518519\n",
+      "====================\n",
+      "Runnning VRSN with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "VRSN             5242               879      -0.646474  0.507395\n",
+      "====================\n",
+      "Runnning VRTX with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "VRTX             5222               865       1.839215   0.49711\n",
+      "====================\n",
+      "Runnning WBA with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "     backtest_length  diff_list_length  total_returns  win_rate\n",
+      "WBA             5242               845      -0.444154  0.507692\n",
+      "====================\n",
+      "Runnning WDAY with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "      backtest_length  diff_list_length  total_returns  win_rate\n",
+      "WDAY             2026               330       0.415127  0.542424\n",
+      "====================\n",
+      "Runnning XEL with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "     backtest_length  diff_list_length  total_returns  win_rate\n",
+      "XEL             5232               874       0.275213  0.564073\n",
+      "====================\n",
+      "Runnning ZM with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "    backtest_length  diff_list_length  total_returns  win_rate\n",
+      "ZM              389                60      -0.209422  0.483333\n",
+      "====================\n",
+      "Runnning ZS with Random\n",
+      "Ran the backtest.\n",
+      "Output is Saved.\n",
+      "    backtest_length  diff_list_length  total_returns  win_rate\n",
+      "ZS              663               112       2.228863  0.544643\n",
+      "====================\n"
+     ]
+    }
+   ],
+   "source": [
+    "\"\"\"    # \"MFI\":MFI,\n",
+    "    # \"RSI20\":lambda x:RSI(x,perc=20),\n",
+    "    # \"RSI30\":RSI,\n",
+    "    # \"RSI50\":lambda x:RSI(x,perc=50),\n",
+    "    # \"MACD_10_20\":MACD,\n",
+    "    # \"EMA\":EMA,\n",
+    "    #\"SMA\":SMA,\n",
+    "    \"MFIandMACD_10_20\":AND_Indicator(MFI,MACD),\n",
+    "    \"MFIandRSI30\":AND_Indicator(MFI,RSI),\n",
+    "    \"MFIandRSI50\":AND_Indicator(MFI,lambda x:RSI(x,perc=50)),\n",
+    "    \"MFIandMACD_10_20\":AND_Indicator(MFI,MACD),\n",
+    "    \"MFIandEMA\":AND_Indicator(MFI,EMA),\n",
+    "    \"MFIandSMA\":AND_Indicator(MFI,SMA),\n",
+    "    \"RSI30andMACD_10_20\":AND_Indicator(lambda x:RSI(x,perc=30),MACD),\n",
+    "    \"RSI30andEMA\":AND_Indicator(lambda x:RSI(x,perc=30),EMA),\n",
+    "    #\"RSI30andSMA\":AND_Indicator(lambda x:RSI(x,perc=30),SMA),\n",
+    "    \"RSI50andMACD_10_20\":AND_Indicator(lambda x:RSI(x,perc=50),MACD),\n",
+    "    #\"RSI50andEMA\":AND_Indicator(lambda x:RSI(x,perc=50),EMA),\n",
+    "    #\"RSI50andSMA\":AND_Indicator(lambda x:RSI(x,perc=50),SMA),\n",
+    "    \"EMAandSMA\":AND_Indicator(EMA,SMA),\n",
+    "    \"MACD_10_20andRSI50andEMA\":AND_Indicator(MACD,lambda x:RSI(x,perc=50),EMA),\n",
+    "    \"MACD_10_20andRSI50andSMA\":AND_Indicator(MACD,lambda x:RSI(x,perc=50),SMA),\n",
+    "    \"MACD_10_20andRSI30andEMA\":AND_Indicator(MACD,lambda x:RSI(x,perc=30),EMA),\n",
+    "    \"MACD_10_20andRSI30andEMA\":AND_Indicator(MACD,lambda x:RSI(x,perc=30),EMA),\n",
+    "    \"MACD_10_20andRSI50andEMAandSMA\":AND_Indicator(MACD,lambda x:RSI(x,perc=50),EMA,SMA), \"\"\"\n",
+    "\n",
+    "TestBack=TestBackModel()\n",
+    "SG=SignalGeneartor()\n",
+    "SG.addDecisions({\n",
+    "    \"Random\":RANDOM\n",
+    "    })\n",
+    "\n",
+    "# Plz Ensure that there is only original data files in the folder! Run ALL code at a time!\n",
+    "folder=\"nasdaq\"\n",
+    "for name,decifunc in SG.NextDecision():\n",
+    "    TestBack.run_folder(\n",
+    "        folder=folder,\n",
+    "        save_log=f\"{folder}/{name}\",\n",
+    "        signal_func_name=name,\n",
+    "        get_indicator_func=getIndicators,\n",
+    "        get_signal_func=decifunc,\n",
+    "        initial_cash=1000000,\n",
+    "        output_folder=\"Conclusion\"\n",
+    "        )"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "None\n"
+     ]
+    },
+    {
+     "data": {
+      "text/html": [
+       "<div>\n",
+       "<style scoped>\n",
+       "    .dataframe tbody tr th:only-of-type {\n",
+       "        vertical-align: middle;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe tbody tr th {\n",
+       "        vertical-align: top;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe thead th {\n",
+       "        text-align: right;\n",
+       "    }\n",
+       "</style>\n",
+       "<table border=\"1\" class=\"dataframe\">\n",
+       "  <thead>\n",
+       "    <tr style=\"text-align: right;\">\n",
+       "      <th></th>\n",
+       "      <th>0</th>\n",
+       "    </tr>\n",
+       "  </thead>\n",
+       "  <tbody>\n",
+       "    <tr>\n",
+       "      <th>0</th>\n",
+       "      <td>2</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>1</th>\n",
+       "      <td>0</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>2</th>\n",
+       "      <td>0</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>3</th>\n",
+       "      <td>0</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>4</th>\n",
+       "      <td>1</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>...</th>\n",
+       "      <td>...</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>659</th>\n",
+       "      <td>1</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>660</th>\n",
+       "      <td>1</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>661</th>\n",
+       "      <td>2</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>662</th>\n",
+       "      <td>1</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>663</th>\n",
+       "      <td>1</td>\n",
+       "    </tr>\n",
+       "  </tbody>\n",
+       "</table>\n",
+       "<p>664 rows × 1 columns</p>\n",
+       "</div>"
+      ],
+      "text/plain": [
+       "     0\n",
+       "0    2\n",
+       "1    0\n",
+       "2    0\n",
+       "3    0\n",
+       "4    1\n",
+       "..  ..\n",
+       "659  1\n",
+       "660  1\n",
+       "661  2\n",
+       "662  1\n",
+       "663  1\n",
+       "\n",
+       "[664 rows x 1 columns]"
+      ]
+     },
+     "execution_count": 9,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "print(TestBack.backtest)\n",
+    "pd.DataFrame(np.random.randint(0,3,size=(debug_df.shape[0],1)))"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.10.10"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 2
+}
